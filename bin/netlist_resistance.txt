@@ -1,0 +1,10 @@
+R1 two 0 1.5                           
+R2 one two 1
+R3 three 0 50
+R4 four five 0.1
+V1 six two 5
+L1 seven two 0.004
+L2 eight three 10000
+
+
+.OPTIONS SPD

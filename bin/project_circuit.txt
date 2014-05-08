@@ -1,0 +1,10 @@
+V1 one two 3
+V2 two one 8
+L1 three four 1e-6
+R1 five six 150
+R2 one two 640
+R3 seven one 1e4
+C1 four six 2e-6
+C2 five two 2e-6
+M1 six four two seven  45e-12 1e-3
+Q1 six five one      
