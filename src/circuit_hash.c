@@ -46,7 +46,7 @@ unsigned int hash(hashtable_t *hashtable,char* key){
 
 	unsigned long int h = 0;
     int i = 0;
-    int len;
+    //int len;
 
     /*
     len = strlen(key);

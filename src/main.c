@@ -1,14 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 
-
-#include "circuit_sim.h"
 #include "node_list.h"
-
 #include "parse.h"
 #include "circuit_hash.h"
 #include "sparse_interface.h"
 #include "circuit_sim_sparse.h"
+#include "graph_metis.h"
 
 int main( int argc , char* argv[]){
 	int flag;
@@ -35,13 +33,13 @@ int main( int argc , char* argv[]){
  	//printf("Solving Method = %s\n",solving_method_names[list.solving_method-1]);
 	//  sparse simulation
 	int vector_size;
-	char method;
+	//char method;
 	sparse_matrix* matrix;
 	sparse_vector* vector;
-	sparse_vector* x;
+	//sparse_vector* x;
 
 
-	method = list.solving_method;
+	//method = list.solving_method;
 	matrix = (sparse_matrix*)create_mna_sparse( &list , &vector , &vector_size);
 	if( !matrix ){
 		fprintf(stderr, "Error creating MNA matrix \n");
@@ -51,6 +49,7 @@ int main( int argc , char* argv[]){
 	/* Print the matrix in a file */
 	cs_print(matrix, "output_sparse_matrix", 0);
 
+	graph_partition(&list);
 	/* clean up before exit */
 	cs_spfree(matrix);
 

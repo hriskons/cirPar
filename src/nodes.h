@@ -41,8 +41,8 @@ typedef struct pair_list_t{
 typedef struct resistance{
 
 	char name[MAX_NAME_LENGTH]; // these should be arrays
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 
 	double value; 
 }RESISTANCE_T;
@@ -51,8 +51,8 @@ typedef struct resistance{
 typedef struct capacity{
 
 	char name[MAX_NAME_LENGTH]; // these should be arrays
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 
 	double value; 
 }CAPACITY_T;
@@ -60,8 +60,8 @@ typedef struct capacity{
 typedef struct inductance{
 
 	char name[MAX_NAME_LENGTH]; // these should be arrays
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 
 	double value; 
 }INDUCTANCE_T;
@@ -69,8 +69,8 @@ typedef struct inductance{
 /* Voltage source.DC for now */
 typedef struct source_v {
 	char name[MAX_NAME_LENGTH];
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 	int mna_row;
 
 	double value;
@@ -104,8 +104,8 @@ typedef struct source_v {
 
 typedef struct source_i{
 	char name[MAX_NAME_LENGTH];
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 
 	double value;
 
@@ -166,8 +166,8 @@ typedef struct bjt{
 /* diode */
 typedef struct diode{
 	char name[MAX_NAME_LENGTH];
-	long node1;
-	long node2;
+	int node1;
+	int node2;
 
 	/* area */
 
