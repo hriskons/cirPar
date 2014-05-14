@@ -10,6 +10,7 @@
 
 int main( int argc , char* argv[]){
 	int flag;
+	int status = 0;
 	
 	if( argc < 2 ){
 		printf("Usage: %s <netlist>\n",argv[0]);
@@ -50,6 +51,10 @@ int main( int argc , char* argv[]){
 	cs_print(matrix, "output_sparse_matrix", 0);
 
 	graph_partition(&list);
+
+	if (status != METIS_OK) {
+	    printf("\n***Metis returned with an error.\n");
+	}
 	/* clean up before exit */
 	cs_spfree(matrix);
 

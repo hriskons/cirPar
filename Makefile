@@ -11,9 +11,9 @@ OBJS    := $(patsubst %.$(SRCEXT),$(OBJDIR)/%.o,$(SRCS))
 
 DEBUG    = -g
 INCLUDES = -I.
-LIBS = libmetis.a 
+LIBS = libmetis.a libGKlib.a
 CFLAGS   = -Wall -pedantic -ansi -c $(DEBUG) $(INCLUDES)
-LDFLAGS  = -lgsl -lgslcblas -lm -L. -lmetis
+LDFLAGS  = -lgsl -lgslcblas -lm -L. -lmetis -lGKlib
 
 ifeq ($(SRCEXT), cpp)
 CC       = $(CXX)

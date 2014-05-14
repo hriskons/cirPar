@@ -102,6 +102,8 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
   int flag;
   static long node_count = 1;
 
+  ht_insert_pair(list->hashtable, "0" , 0);
+
 
   if( line == NULL || node == NULL  || type == NULL )
     return 0;
@@ -121,9 +123,7 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
       }
       strcpy( node->resistance.name , token);
 
-      /* 
-       *Read <+> node
-       */
+      /* Read <+> node */
       token = strtok(NULL," ");
       if( token == NULL){
         return 0;
@@ -135,46 +135,40 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
         list->has_reference = 1;
       }
       else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->resistance.node1 = node_count;
-          node_count++;    // get ready for the next node
+    	  /* this is not a reference node.Add string to hash table */
+    	  flag = ht_insert_pair(list->hashtable, token , node_count);
+    	  if( flag == 1 ){
+    		  /* successfull insertion */
+    		  printf("Node %s was translated to %ld\n",token,node_count);
+    		  node->resistance.node1 = node_count;
+    		  node_count++;    // get ready for the next node
 
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          if (!ht_get(list->hashtable,token,&n))
-          {
-        	  printf("Token failed: %s \n",token);
-        	  perror("Key was not found in the hash table\n The program will exit\n");
-        	  exit(0);
-          }
-          node->resistance.node1 = n;
-        }
+    	  }
+    	  else if( flag == 0 ){
+    		  /* NULL pointer or out of memory */
+    		  printf("Error at inserting pair to hash table..\n");
+    		  //free_list(list);
+    		  exit(1);
+    	  }
+    	  else if( flag == -1 ){
+    		  int n;
+    		  //printf("Node : \"%s\" already on hash table \n",token);
+    		  if (!ht_get(list->hashtable,token,&n))
+    		  {
+    			  printf("Token failed: %s \n",token);
+    			  perror("Key was not found in the hash table\n The program will exit\n");
+    			  exit(0);
+    		  }
+    		  node->resistance.node1 = n;
+    	  }
       }
       //printf("Resistance node number: %ld\n",node->resistance.node1);
 
-      /* 
-       * Read <-> node
-       */
+      /* Read <-> node */
       token = strtok(NULL," ");
       if( token == NULL){
         return 0;
       }
-
 
       /* check for reference node (ground) */
       if( strcmp(token,"0") == 0 ){
@@ -182,28 +176,25 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
         list->has_reference = 1;
       }
       else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
+        /* this is not a reference node.Add string to hash table */
         flag = ht_insert_pair(list->hashtable, token , node_count);
         if( flag == 1 ){
-          /* successfull insertion */
-          node->resistance.node2 = node_count;
-          node_count++;    // get ready for the next node
+        	printf("Node %s was translated to %ld\n",token,node_count);
+        	/* successfull insertion */
+        	node->resistance.node2 = node_count;
+        	node_count++;    // get ready for the next node
         }
         else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
+        	/* NULL pointer or out of memory */
+        	printf("Error at inserting pair to hash table..\n");
+        	//free_list(list);
+        	exit(1);
         }
         else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->resistance.node2 = n;
+        	int n;
+        	//printf("Node : \"%s\" already on hash table \n",token);
+        	ht_get(list->hashtable,token,&n);
+        	node->resistance.node2 = n;
         }
       }       
 
@@ -1669,45 +1660,39 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
 
       }
       else if( strcmp(token,".PLOT") == 0 || strcmp(token,".plot") == 0 ){
-        
-            int plot_num=0;
-        //reading the PLOT command keyword
+    	  int plot_num=0;
+    	  //reading the PLOT command keyword
 
-
-        plot_init();
-            list->plot = PLOT_ON;
-
-
-            while(1){
-          //reading the source type for plotting
-          token = strtok(NULL," (\n");
-          if( !token && plot_num == 0 ){
-                  printf("Error while parsing...\n");
-            printf("Line : %s\n", line );
-            return 0;
-            }
-                else if(!token && plot_num>0)
-                  break;
+    	  plot_init();
+    	  list->plot = PLOT_ON;
+          while(1){
+        	  //reading the source type for plotting
+        	  token = strtok(NULL," (\n");
+        	  if( !token && plot_num == 0 ){
+        		  printf("Error while parsing...\n");
+        		  printf("Line : %s\n", line );
+        		  return 0;
+        	  }
+        	  else if(!token && plot_num>0)
+        		  break;
           
 
-          //reading the node name
-          token = strtok(NULL,")");
-          printf("Going to plot results for node: %s \n", token);
-          if( !token ){
-            printf("Error while parsing...\n");
-            printf("Line : %s\n", line );
-            return 0;
+        	  //reading the node name
+        	  token = strtok(NULL,")");
+        	  printf("Going to plot results for node: %s \n", token);
+        	  if( !token ){
+        		  printf("Error while parsing...\n");
+        		  printf("Line : %s\n", line );
+        		  return 0;
+        	  }
+        	  plot_add_node(token);
+        	  plot_num++;
           }
-                plot_add_node(token);
-                plot_num++;
-            }
       }
-
-  
     } 
   }
-  printf("Total node count: %ld \n",node_count);
-  printf("Hash_table nodes: %d\n",list->hashtable->num_nodes);
+  //printf("Total node count: %ld \n",node_count);
+  //printf("Hash_table nodes: %d\n",list->hashtable->num_nodes);
 
   return 2;
 }
