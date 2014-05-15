@@ -104,7 +104,6 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
 
   ht_insert_pair(list->hashtable, "0" , 0);
 
-
   if( line == NULL || node == NULL  || type == NULL )
     return 0;
 

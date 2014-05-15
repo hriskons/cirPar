@@ -4,6 +4,7 @@
 struct entry_s{
 
 	char *key;
+	int ikey;
 	int value;
 
 	struct entry_s *next; 

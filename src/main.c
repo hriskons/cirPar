@@ -50,7 +50,7 @@ int main( int argc , char* argv[]){
 	/* Print the matrix in a file */
 	cs_print(matrix, "output_sparse_matrix", 0);
 
-	graph_partition(&list);
+	status = graph_partition(&list);
 
 	if (status != METIS_OK) {
 	    printf("\n***Metis returned with an error.\n");

@@ -121,7 +121,6 @@ int ht_insert_pair(hashtable_t *hashtable, char* key, int value ){
 	newpair = ht_create_pair(key , value);
 	if( !newpair )
 		return 0;
-
 	index = hash(hashtable , key );
 
 	//head = hashtable->table[index];
