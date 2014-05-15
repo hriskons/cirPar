@@ -138,7 +138,7 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
     	  flag = ht_insert_pair(list->hashtable, token , node_count);
     	  if( flag == 1 ){
     		  /* successfull insertion */
-    		  printf("Node %s was translated to %ld\n",token,node_count);
+    		  //printf("Node %s was translated to %ld\n",token,node_count);
     		  node->resistance.node1 = node_count;
     		  node_count++;    // get ready for the next node
 
@@ -178,7 +178,7 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
         /* this is not a reference node.Add string to hash table */
         flag = ht_insert_pair(list->hashtable, token , node_count);
         if( flag == 1 ){
-        	printf("Node %s was translated to %ld\n",token,node_count);
+        	//printf("Node %s was translated to %ld\n",token,node_count);
         	/* successfull insertion */
         	node->resistance.node2 = node_count;
         	node_count++;    // get ready for the next node

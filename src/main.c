@@ -8,33 +8,49 @@
 #include "circuit_sim_sparse.h"
 #include "graph_metis.h"
 
-int main( int argc , char* argv[]){
+
+void parse_options(int argc, char* argv[],LIST *list,partition_t* par_graph)
+{
 	int flag;
-	int status = 0;
-	
-	if( argc < 2 ){
-		printf("Usage: %s <netlist>\n",argv[0]);
-		return -1;
+
+
+	if( argc < 3 ){
+		fprintf(stderr,"Usage: %s <netlist> <number of partitions>\n",argv[0]);
+		exit(-1);
 	}
+
+	/* Set the number of clusters that you want metis to produce */
+	par_graph->noOfParts = atoi(argv[2]);
+	if(par_graph->noOfParts <= 0){
+		fprintf(stderr,"Number of partitions must be > zero");
+		exit(-1);
+	}
+
+	flag = parse_netlist(argv[1] , list);
+	if( !flag ){
+		fprintf(stderr,"PARSING NETLIST FAILED\n");
+		free_list(list);
+		exit(-1);
+	}
+
+
+}
+
+int main( int argc , char* argv[]){
+
+
+	/* Partition table */
+	partition_t par_graph;
+
 
 	printf("Starting simulation....\n");
  	LIST list;
  	init_list(&list);
  	
 
- 	//FILE *input_file=fopen(argv[1], "r");
- 	//int flag = check_netlist_file(input_file,&list);
- 	flag = parse_netlist(argv[1] , &list);
- 	if( !flag ){
- 		printf("ERROR BUILDING NETLIST\n");
- 		free_list(&list);
- 		return -1;
- 	}
+	parse_options(argc,argv,&list,&par_graph);
 
- 	//printf("Solving Method = %s\n",solving_method_names[list.solving_method-1]);
-	//  sparse simulation
 	int vector_size;
-	//char method;
 	sparse_matrix* matrix;
 	sparse_vector* vector;
 	//sparse_vector* x;
@@ -50,11 +66,8 @@ int main( int argc , char* argv[]){
 	/* Print the matrix in a file */
 	cs_print(matrix, "output_sparse_matrix", 0);
 
-	status = graph_partition(&list);
+	graph_partition(&list,&par_graph);
 
-	if (status != METIS_OK) {
-	    printf("\n***Metis returned with an error.\n");
-	}
 	/* clean up before exit */
 	cs_spfree(matrix);
 
