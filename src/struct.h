@@ -15,6 +15,7 @@
 #define _LIBMETIS_STRUCT_H_
 
 #include "metis.h"
+#include <stdlib.h>
 
 /*************************************************************************/
 /*! This data structure stores cut-based k-way refinement info about an

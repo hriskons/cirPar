@@ -70,13 +70,9 @@ int main( int argc , char* argv[]){
 
 	/* clean up before exit */
 	cs_spfree(matrix);
-
-	//free(vector);
-	//free(x);
-/*
- * Clean up
- */
+	free(vector);
 	free_list(&list);
+
 
 	return 0;
 }

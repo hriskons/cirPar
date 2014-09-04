@@ -41,4 +41,15 @@ int sparse_solve_cholesky(sparse_matrix* matrix, sparse_vector* b, sparse_vector
  *			 0 on failure
  */
 int sparse_dc_sweep(LIST *list , sparse_matrix* matrix , sparse_vector* rhs);
+
+
+void add_resistance_element(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+
+void add_current_source(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+
+void add_voltage_source(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+
+void add_inductunce_element(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+
+
 #endif

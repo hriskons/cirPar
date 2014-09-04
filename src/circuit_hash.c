@@ -53,7 +53,7 @@ unsigned int hash(hashtable_t *hashtable,char* key){
 
 	for ( i = 0; i < len; i++ ) {
     	h += key[i];
-    	h += ( h << 10 );
+    	h += ( h << 1/0 );
     	h ^= ( h >> 6 );
 	}
  

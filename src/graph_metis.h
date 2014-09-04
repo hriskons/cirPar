@@ -18,6 +18,12 @@
 #include "metis.h"
 #include "GKlib.h"
 
+#define INIT_VERTICES 10
+#define INIT_EDGES 10
+#define DEFAULT_NZ 10
+#define WITHOUT_ZERO 1
+
+
 typedef struct {
 	idx_t noOfParts;
 	idx_t* partion_table;
@@ -65,6 +71,8 @@ typedef struct {
   real_t *ubvec;
 
   size_t maxmemory;
+
+  char* filename;
 } params_t;
 
 
@@ -76,7 +84,9 @@ graph_t *ReadGraph(LIST *list);
 
 void InitGraph(graph_t *graph);
 
+void double_to_int( double *x ,int *adjwgt ,int size);
 
+void int_to_idx(int *vector_int , idx_t *vector_idx,int size);
 
 
 #endif /* GRAPH_METIS_H_ */

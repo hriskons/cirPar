@@ -38,8 +38,10 @@ int parse_netlist(char* filename , LIST* list){
 
   FILE* file;
   file = fopen(filename,"r");
-  if( !file )
-    return 0;
+  if( !file ){
+	  fprintf(stderr,"Failed to open the netlist.\n");
+	  return 0;
+  }
 
   line_number = 1 ;
   /*Read until EOF */
@@ -65,7 +67,7 @@ int parse_netlist(char* filename , LIST* list){
 
           /* Error while parsing line */
           fclose(file);
-          printf("Error while parsing.Line %d : %s\n",line_number , line);
+          fprintf(stderr,"Error while parsing.Line %d : %s\n",line_number , line);
           return 0;
         }
       }
