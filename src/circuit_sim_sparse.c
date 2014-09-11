@@ -126,14 +126,14 @@ void add_current_source(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE*
 		/* ste <+> */
 		value  = vector[curr->node.source_i.node1 - 1 ];
 		value -= current;
-		vector[curr->node.source_i.node1 -1 ] =  value;
+		vector[curr->node.source_i.node1 -1] =  value;
 	}
 
 	if( curr->node.source_i.node2 != 0 ){
 		/* <-> */
 		value  = vector[curr->node.source_i.node2 - 1 ];
 		value += current;
-		vector[curr->node.source_i.node2 -1 ] =  value;
+		vector[curr->node.source_i.node2 -1] =  value;
 	}
 }
 

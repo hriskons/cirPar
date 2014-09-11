@@ -18,12 +18,13 @@
 
 
 
-void graph_partition(LIST *list , partition_t* partition_info)
+sparse_matrix* graph_partition(LIST *list , partition_t* partition_info)
 {
 	graph_t* graph;
 	params_t *params;
 	idx_t options[METIS_NOPTIONS], status;
 	idx_t objval;
+	sparse_matrix* matrix = (sparse_matrix*) malloc(sizeof(sparse_matrix));
 
 	graph = ReadGraph(list);
 
@@ -68,12 +69,22 @@ void graph_partition(LIST *list , partition_t* partition_info)
 	}
 	if (status != METIS_OK) {
 		fprintf(stderr,"\n***Metis returned with an error.***\n");
-		return;
+		return NULL;
 	}
-
+    partition_info->size = graph->nvtxs;
+    partition_info->noOfParts = params->nparts;
     WritePartition(params->filename, partition_info->partion_table, graph->nvtxs, params->nparts);
 
 	printf("Objval: %d\n",objval);
+
+	matrix->nz = -1;
+	matrix->n = graph->nvtxs;
+	matrix->p = graph->xadj;
+	matrix->i = graph->adjncy;
+
+
+
+	return matrix;
 }
 
 

@@ -17,6 +17,7 @@
 
 #include "metis.h"
 #include "GKlib.h"
+#include "sparse_interface.h"
 
 #define INIT_VERTICES 10
 #define INIT_EDGES 10
@@ -26,6 +27,7 @@
 
 typedef struct {
 	idx_t noOfParts;
+	idx_t size;
 	idx_t* partion_table;
 
 } partition_t;
@@ -78,7 +80,7 @@ typedef struct {
 
 
 
-void graph_partition(LIST *list , partition_t* partition_table);
+sparse_matrix* graph_partition(LIST *list , partition_t* partition_table);
 
 graph_t *ReadGraph(LIST *list);
 

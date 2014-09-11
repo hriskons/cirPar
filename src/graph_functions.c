@@ -2,6 +2,12 @@
 #include "graph_metis.h"
 #include "wraped_functions.h"
 
+
+void add_resistance_element_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+void add_current_source_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+void add_voltage_source_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+void add_inductunce_element_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
+
 /*************************************************************************/
 /* Transformation functions */
 /*************************************************************************/
@@ -207,7 +213,7 @@ void METIS_init_params(params_t *params , int ncon)
 
 	params->pfactor = 0;
 
-	params->nparts = 2; 					/* The number of parts to partition the graph. */
+	params->nparts = 4; 					/* The number of parts to partition the graph. */
 
 	switch (params->pfactor) {
 		case (METIS_PTYPE_RB) : { 	params->ufactor = 1; 		break;	}
@@ -255,6 +261,8 @@ graph_t *ReadGraph(LIST *list)
  	if(!graph_matrix)
  		return NULL;
 
+ 	int m2_elements_found = 0;
+
  	/* The only values that we have to put in the diagramm array are the ones that represent the
  	 * resistors. The reason is that in this first stage we only study RLC circuits. This means
  	 * that we can only have Resistors, Conductors, Inductors and from the sources only Voltage.
@@ -264,17 +272,21 @@ graph_t *ReadGraph(LIST *list)
  	 */
  	/* TODO: Check again if we have to include the inductors also. */
 	for( i = 0, curr = list->head ; curr; curr = curr->next, i++){
-	    /* RESISTANCE ELEMENT */
-		if( curr->type == NODE_RESISTANCE_TYPE ){
-			idx_t plus_node = curr->node.resistance.node1;
-			idx_t minus_node = curr->node.resistance.node2;
-
-			/* <+> <-> */
-			csEntry(graph_matrix, plus_node , minus_node , 1.0);
-
-			/* <-> <+> */
-			csEntry(graph_matrix, minus_node , plus_node , 1.0);
-
+		switch (curr->type){
+			case NODE_RESISTANCE_TYPE:  { 	add_resistance_element_graph(graph_matrix , NULL, curr , -1); break; 	}  			/* RESISTANCE ELEMENT	 */
+			case NODE_SOURCE_I_TYPE: 	{ 	add_current_source_graph(graph_matrix, NULL, curr, -1); break;		}			/* CURRENT SOURCE  		 */
+			case NODE_SOURCE_V_TYPE:	{
+											m2_elements_found++;
+											int matrix_row = list->hashtable->num_nodes + m2_elements_found - 1;
+											add_voltage_source_graph( graph_matrix,  NULL,  curr, matrix_row );
+											break;
+										}																				/* VOLTAGE SOURCE		 */
+			case NODE_INDUCTANCE_TYPE:  {
+											m2_elements_found++;
+											int matrix_row = list->hashtable->num_nodes  + m2_elements_found - 1 ;
+											add_inductunce_element_graph( graph_matrix, NULL, curr, matrix_row);
+											break;
+										}																				/* INDUCTUNCE			 */
 		}
 	}
 	/* just checking the number of non_zero elements */
@@ -290,9 +302,10 @@ graph_t *ReadGraph(LIST *list)
 	/* convert the sparse matrix into a compressed column form */
 	graph_matrix = 	cs_compress(graph_matrix);
 
-#if DEBUG
+#if 0
 	cs_print(graph_matrix,"sparse_matrix_before",0);
 #endif
+
 	graph->xadj   = imalloc(graph->nvtxs + 1, 			"Allocate memory for graph->xadj");
 	graph->adjncy = imalloc(graph->nedges,  			"Allocate memory for graph->adjncy");
 	graph->adjwgt = imalloc(graph->nedges, 				"Allocate memory for graph->adjwgt");
@@ -306,8 +319,78 @@ graph_t *ReadGraph(LIST *list)
 	int_to_idx(graph->adjwgt,graph->vwgt, graph->nvtxs);
 	int_to_idx(graph->adjwgt,graph->vsize, graph->nvtxs);
 
-#if DEBUG
+#if 1
 	cs_print(graph_matrix,"sparse_matrix_after",0);
 #endif
 	return graph;
 }
+
+
+
+void add_resistance_element_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row)
+{
+	long plus_node  = curr->node.resistance.node1 - 1;
+	long minus_node = curr->node.resistance.node2  - 1;
+
+	if (!( minus_node == -1 || plus_node == -1 )){
+
+		/* <+> <-> */
+		csEntry(matrix, plus_node , minus_node , 1);
+
+		/* <-> <+> */
+		csEntry(matrix, minus_node , plus_node , 1);
+
+	}
+}
+
+void add_current_source_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row)
+{
+
+	/* change only the vector */
+	return;
+}
+
+void add_voltage_source_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row)
+{
+	curr->node.source_v.mna_row = matrix_row;
+
+	long plus_node  = curr->node.source_v.node1 - 1;
+	long minus_node = curr->node.source_v.node2 - 1;
+
+	/* <+> */
+	if( plus_node != -1 ){
+		csEntry(matrix, matrix_row , plus_node , 1.0 );
+
+		csEntry(matrix, plus_node , matrix_row , 1.0 );
+	}
+
+	/* <-> */
+	if( minus_node != -1 ){
+		csEntry(matrix, matrix_row , minus_node , 1.0 );
+
+		csEntry(matrix, minus_node , matrix_row , 1.0 );
+	}
+
+}
+
+void add_inductunce_element_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row)
+{
+
+	/* Change the matrix */
+	long plus_node  = curr->node.inductance.node1 - 1;
+	long minus_node = curr->node.inductance.node2 - 1;
+
+	/* <+> */
+	if( plus_node != -1 ){
+		csEntry(matrix, matrix_row , plus_node , 1.0);
+
+		csEntry(matrix, plus_node , matrix_row , 1.0);
+	}
+	/* <-> */
+	if( minus_node != -1 ){
+		csEntry(matrix, matrix_row , minus_node , 1.0 );
+
+		csEntry(matrix, minus_node , matrix_row , 1.0 );
+	}
+}
+
