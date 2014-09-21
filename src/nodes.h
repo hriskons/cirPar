@@ -175,6 +175,55 @@ typedef struct diode{
 
 }DIODE_T;
 
+/* Voltage source.DC for now */
+typedef struct {
+	char name[MAX_NAME_LENGTH];
+	int node1;
+	int node2;
+	int mna_row;
+
+	double value;
+
+	char pulse_type;
+	char is_ac;
+
+	/*values for transient spec, might need to add specific nodes for each type (EXP,SIN etc) to save memory*/
+	double i1;
+	double i2;
+	double td1;
+	double td2;
+	double tc1;
+	double tc2;
+
+	double ia;
+	double fr;
+	double td;
+	double df;
+	double ph;
+
+	double tr;
+	double tf;
+	double pw;
+	double per;
+
+	/* bipolar junction transistor*/
+	int collector;
+	int base;
+	int emitter;
+
+	/* MOSFET transistor*/
+	int drain;
+	int gate;
+	int source;
+	int body;
+	double l;
+	double w;
+
+	/*need to implement a dynamic way to add (ti ii) pairs for PWL transient spec*/
+	PAIR_LIST* pair_list;
+
+}GENERAL_NODE;
+
 /*
  * Higher level base node */
 typedef union node{

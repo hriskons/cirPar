@@ -184,7 +184,6 @@ int add_node_to_list( LIST* list, NODE* circuit_node , int type){
 
 	}
 	else{
-
 		list->len = 1;
 		new->next = NULL;
 		list->head = new;

@@ -21,6 +21,20 @@
 
 
 static int get_node_from_line( LIST* list,char* line , NODE* node , int* type);
+void parse_node_names(char* token,GENERAL_NODE* node,LIST* list, long* node_count);
+int read_transient_elements(char* token,GENERAL_NODE* node);
+void read_mos_elements(char* token,GENERAL_NODE* node,LIST* list,long* node_count);
+void read_bjt_elements(char* token,GENERAL_NODE* node,LIST* list,long* node_count);
+
+void safe_strtok(char**token,char* line,char* input)
+{
+
+	*token = strtok(line,input);
+	if( *token == NULL ){
+		fprintf(stderr,"Exiting from strtok because it did not return a token\n");
+		exit(0);
+	}
+}
 
 /*
  * Parse netlist
@@ -42,36 +56,27 @@ int parse_netlist(char* filename , LIST* list){
 	  fprintf(stderr,"Failed to open the netlist.\n");
 	  return 0;
   }
-
+  list->non_zero_elements = 0;
   line_number = 1 ;
   /*Read until EOF */
   while( !feof(file)){
 
-    /* Get a single line */
-    if( fgets( line , MAX_LINE_SIZE , file) != NULL ) {
+    if( fgets( line , MAX_LINE_SIZE , file) != NULL ) {									/* Get a single line */
+		if( line[0] != '*'){															/* check for comment,else process */
+			res = get_node_from_line( list, line , &element_node , &element_type);
 
-      /* check for comment,else process */
-      if( line[0] != '*'){
-        res = get_node_from_line( list, line , &element_node , &element_type);
-        if( res == 1 ){
-
-          /* add node read and store at list */
-          //printf("NODE READ: %s , %d , %d , %g \n",element_node.resistance.name , element_node.resistance.node1 , element_node.resistance.node2 , element_node.resistance.value);
-          res = add_node_to_list(list , &element_node , element_type);
-          if( !res ){
-            printf("NO MEMORY\n");
-            return 0;
-          }
-        }
-        else if( res == 0 ){
-
-          /* Error while parsing line */
-          fclose(file);
-          fprintf(stderr,"Error while parsing.Line %d : %s\n",line_number , line);
-          return 0;
-        }
-      }
-
+			if( res == 1 ){																/* add node read and store at list */
+				res = add_node_to_list(list , &element_node , element_type);
+				if( !res ){
+					printf("NO MEMORY\n");
+					return 0;
+				}
+			}else if( res == 0 ){														/* Error while parsing line */
+				fclose(file);
+				fprintf(stderr,"Error while parsing.Line %d : %s\n",line_number , line);
+				return 0;
+			}
+		}
     }
     line_number++;
   }
@@ -85,6 +90,352 @@ int parse_netlist(char* filename , LIST* list){
   }
 }
 
+int parse_line(GENERAL_NODE* node,char* line,LIST* list,char type)
+{
+	char* token;
+	static long node_count = 1;
+
+	/* read name */
+	safe_strtok(&token,line," ");
+	strcpy( node->name , token);
+
+	parse_node_names(token,node,list,&node_count);
+
+	token = strtok(NULL," ");
+	if( token == NULL || token[0] == '\n'){
+		return node_count;
+	}else{
+		printf("Extra token: %d\n",token[0]);
+		switch (type){
+			case 'V':
+			case 'v':
+			case 'I':
+			case 'i': { 	read_transient_elements(token,node);					break;	}
+			case 'M':
+			case 'm': {		read_mos_elements(token,node,list,&node_count);			break;	}
+			case 'Q':
+			case 'q': {		read_bjt_elements(token,node,list,&node_count);			break;	}
+		}
+
+		return node_count;
+	}
+}
+
+
+int read_node(LIST* list,char* token,long* node_count)
+{
+	int flag;
+
+	/* check for reference node (ground) */
+	if( strcmp(token,"0") == 0 ){
+		list->has_reference = 1;
+		return 0;
+	}
+
+	/* this is not a reference node.Add string to hash table */
+	flag = ht_insert_pair(list->hashtable, token , *node_count);
+	if( flag == 1 ){	  		/* successfull insertion */
+		(*node_count)++;    		// get ready for the next node
+		return (*node_count) - 1;
+	}else if( flag == 0 ){	 	/* NULL pointer or out of memory */
+
+		fprintf(stderr,"Error at inserting pair to hash table..\n");
+		exit(1);
+	}else if( flag == -1 ){
+
+		int n;
+
+		if (!ht_get(list->hashtable,token,&n))
+		{
+		  fprintf(stderr,"Token failed: %s \n",token);
+		  perror("Key was not found in the hash table\n The program will exit\n");
+		  exit(0);
+		}
+		return n;
+	}
+
+	/* It should not reach this point */
+	return -1;
+}
+
+
+void parse_node_names(char* token,GENERAL_NODE* node,LIST* list, long* node_count)
+{
+
+	/* Read <+> node */
+	safe_strtok(&token,NULL," ");
+	node->node1 = read_node(list,token,node_count);
+
+	/* Read <-> node */
+	safe_strtok(&token,NULL," ");
+	node->node2 = read_node(list,token,node_count);
+
+	/* read value node */
+	safe_strtok(&token,NULL," ");
+	node->value = atof(token);
+
+}
+int read_transient_elements(char* token,GENERAL_NODE* node)
+{
+	printf("Read transient elements %s\n",token);
+    /*check for exponential transient spec*/
+    if (strcmp(token,"EXP") == 0 || strcmp(token,"exp") == 0){
+
+		safe_strtok(&token,NULL,"() \n");
+		node->i1 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->i2 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->td1 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->tc1 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->td2 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->tc2 = atof(token);
+
+		node->pulse_type = PULSE_EXP;
+    }
+    /*check for SIN transient spec*/
+    else if(strcmp(token,"SIN") == 0 || strcmp(token,"sin") == 0){
+
+		safe_strtok(&token,NULL,"() \n");
+		node->i1 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->ia = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->fr = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->td = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->df = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->ph = atof(token);
+
+		node->pulse_type = PULSE_SIN;
+    }
+
+    /*check for PULSE transient spec*/
+    else if(strcmp(token,"PULSE") == 0 || strcmp(token,"PULSE") == 0){
+
+		safe_strtok(&token,NULL,"() \n");
+		node->i1 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->i2 = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->td = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->tr = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->tf = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->pw = atof(token);
+
+		safe_strtok(&token,NULL,"() \n");
+		node->per = atof(token);
+
+		node->pulse_type = PULSE_PULSE;
+
+    }else if(strcmp(token,"PWL") == 0 || strcmp(token,"pwl")){
+		PAIR_LIST* pair_list = create_pair_list();
+		if(!pair_list){
+			printf("Not enough memory for pair list...\n");
+			return 0;
+		}
+
+		safe_strtok(&token,NULL,"() \n");
+
+		while(token != NULL){
+			double ti,ii;
+
+			ti = atof(token);
+
+			safe_strtok(&token,NULL,"() \n");
+			ii = atof(token);
+			add_to_pair_list(pair_list, ti, ii);
+
+			safe_strtok(&token,NULL,"() \n");
+
+		}
+		node->pair_list = pair_list;
+
+		node->pulse_type = PULSE_PWL;
+	}
+
+    node->is_ac = 1;
+	return 1;
+}
+
+
+void read_mos_elements(char* token,GENERAL_NODE* node,LIST* list,long* node_count)
+{
+    /* read source */
+    safe_strtok(&token,NULL," ");
+    node->source = read_node(list,token,node_count);
+
+    /* read body */
+    safe_strtok(&token,NULL," ");
+    node->body = read_node(list,token,node_count);
+
+    /* read length */
+    safe_strtok(&token,NULL," ");
+    node->l = atof(token);
+
+    /* read width */
+    safe_strtok(&token,NULL," ");
+    node->w = atof(token);
+}
+
+void read_bjt_elements(char* token,GENERAL_NODE* node,LIST* list,long* node_count)
+{
+    safe_strtok(&token,NULL," ");
+    node->emitter = read_node(list,token,node_count);
+}
+
+void set_R_Node(LIST* list,GENERAL_NODE* node,RESISTANCE_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->node1 = node->node1;
+	resNode->node2 = node->node2;
+	resNode->value = node->value;
+
+	*type = NODE_RESISTANCE_TYPE;
+
+	if(!resNode->node1)
+		list->non_zero_elements++;
+	else if(!resNode->node2)
+		list->non_zero_elements++;
+	else
+		list->non_zero_elements += 4;
+
+
+}
+
+void set_C_Node(GENERAL_NODE* node,CAPACITY_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->node1 = node->node1;
+	resNode->node2 = node->node2;
+	resNode->value = node->value;
+
+	*type = NODE_CAPACITY_TYPE;
+
+}
+
+void set_L_Node(LIST* list,GENERAL_NODE* node,INDUCTANCE_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->node1 = node->node1;
+	resNode->node2 = node->node2;
+	resNode->value = node->value;
+
+	*type = NODE_INDUCTANCE_TYPE;
+
+	if(!resNode->node1)
+		list->non_zero_elements += 2;
+	if(!resNode->node2)
+		list->non_zero_elements += 2;
+}
+
+void set_M_Node(GENERAL_NODE* node,MOSFET_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->drain 	= node->node1;
+	resNode->gate 	= node->node2;
+
+	resNode->source = node->source;
+    resNode->body 	= node->body;
+    resNode->l 		= node->l;
+    resNode->w 		= node->w;
+
+    *type = NODE_MOSFET_TYPE;
+}
+
+void set_Q_Node(GENERAL_NODE* node,BJT_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->collector 	= node->node1;
+	resNode->base 			= node->node2;
+	resNode->emitter	= node->emitter;
+}
+
+void copy_transient_elements(void* resNode,GENERAL_NODE* node,int type)
+{
+	SOURCE_V_T* tempNode = (SOURCE_V_T*)resNode;
+
+	if(type != NODE_SOURCE_V_TYPE)
+		tempNode = (SOURCE_I_T*)resNode;
+
+	tempNode->pulse_type 	= node->pulse_type;
+	tempNode->is_ac 		= node->is_ac;
+
+	/*values for transient spec, might need to add specific nodes for each type (EXP,SIN etc) to save memory*/
+	tempNode->i1 			= node->i1;
+	tempNode->i2			= node->i2;
+	tempNode->td1			= node->td1;
+	tempNode->td2			= node->td2;
+	tempNode->tc1			= node->tc1;
+	tempNode->tc2			= node->tc2;
+
+	tempNode->ia			= node->ia;
+	tempNode->fr			= node->fr;
+	tempNode->td			= node->td;
+	tempNode->df			= node->df;
+	tempNode->ph			= node->ph;
+
+	tempNode->tr			= node->tr;
+	tempNode->tf			= node->tf;
+	tempNode->pw			= node->pw;
+	tempNode->per			= node->per;
+
+	tempNode->pair_list  = node->pair_list;
+
+}
+
+void set_V_Node(LIST* list,GENERAL_NODE* node,SOURCE_V_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->node1 = node->node1;
+	resNode->node2 = node->node2;
+	resNode->value = node->value;
+
+	copy_transient_elements((void*)resNode,node,NODE_SOURCE_V_TYPE);
+
+	*type = NODE_SOURCE_V_TYPE;
+
+	if(!resNode->node1)
+		list->non_zero_elements += 2;
+	if(!resNode->node2)
+		list->non_zero_elements += 2;
+
+}
+
+void set_I_Node(GENERAL_NODE* node,SOURCE_I_T* resNode,int* type)
+{
+	strncpy(resNode->name,node->name,MAX_NAME_LENGTH);
+	resNode->node1 = node->node1;
+	resNode->node2 = node->node2;
+	resNode->value = node->value;
+
+	copy_transient_elements((void*)resNode,node,NODE_SOURCE_I_TYPE);
+
+	*type = NODE_SOURCE_I_TYPE;
+}
 
 /* 
  * Proccess a single line
@@ -96,1359 +447,44 @@ int parse_netlist(char* filename , LIST* list){
  * Retuns: 1 when a node was identified correctly.Variables -node-  and -type- contain a circuit node
  *         0 when a parsing error occurs.Variables -node- and -type- values are not predicted
  */
-
 static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
-
-  char c;
-  char* token;
-  int flag;
-  static long node_count = 1;
-
-  ht_insert_pair(list->hashtable, "0" , 0);
-
-  if( line == NULL || node == NULL  || type == NULL )
-    return 0;
-
-  //printf("\nParsing line: %s\n",line);
-  c = line[0];
-
-
-  switch(c){
-    case 'R':
-    case 'r':{
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-
-        return 0 ;
-      }
-      strcpy( node->resistance.name , token);
-
-      /* Read <+> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->resistance.node1 = 0;
-        list->has_reference = 1;
-      }
-      else{
-    	  /* this is not a reference node.Add string to hash table */
-    	  flag = ht_insert_pair(list->hashtable, token , node_count);
-    	  if( flag == 1 ){
-    		  /* successfull insertion */
-    		  //printf("Node %s was translated to %ld\n",token,node_count);
-    		  node->resistance.node1 = node_count;
-    		  node_count++;    // get ready for the next node
-
-    	  }
-    	  else if( flag == 0 ){
-    		  /* NULL pointer or out of memory */
-    		  printf("Error at inserting pair to hash table..\n");
-    		  //free_list(list);
-    		  exit(1);
-    	  }
-    	  else if( flag == -1 ){
-    		  int n;
-    		  //printf("Node : \"%s\" already on hash table \n",token);
-    		  if (!ht_get(list->hashtable,token,&n))
-    		  {
-    			  printf("Token failed: %s \n",token);
-    			  perror("Key was not found in the hash table\n The program will exit\n");
-    			  exit(0);
-    		  }
-    		  node->resistance.node1 = n;
-    	  }
-      }
-      //printf("Resistance node number: %ld\n",node->resistance.node1);
-
-      /* Read <-> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->resistance.node2 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /* this is not a reference node.Add string to hash table */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-        	//printf("Node %s was translated to %ld\n",token,node_count);
-        	/* successfull insertion */
-        	node->resistance.node2 = node_count;
-        	node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-        	/* NULL pointer or out of memory */
-        	printf("Error at inserting pair to hash table..\n");
-        	//free_list(list);
-        	exit(1);
-        }
-        else if( flag == -1 ){
-        	int n;
-        	//printf("Node : \"%s\" already on hash table \n",token);
-        	ht_get(list->hashtable,token,&n);
-        	node->resistance.node2 = n;
-        }
-      }       
-
-      //node->resistance.node2 = atoi(token);
-
-      /* read value node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-          
-      node->resistance.value = atof(token);
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_RESISTANCE_TYPE;
-        return 1;
-      }
-      else{
-        /* tokens were found.print for debugging...*/
-        printf("LINE: %s , garbage token : %s\n" , line , token);
-        return 0;
-      }
-
-    }
-    case 'C':
-    case 'c':{
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->capacity.name , token);     
-
-      /* read <+> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->capacity.node1 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->capacity.node1 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->capacity.node1 = n;
-        }
-      } 
-
-//      node->capacity.node1 = atoi(token);
-      
-      /* read <-> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->capacity.node2 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->capacity.node2 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->capacity.node2 = n;
-        }
-      } 
-
-      /* read value node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-      node->capacity.value = atof(token);
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_CAPACITY_TYPE;
-        return 1;
-      }
-      else{
-        /* tokens were found.print for debugging...*/
-        printf("LINE: %s , garbage token : %s\n" , line , token);
-        return 0;
-      }
-    }
-    case 'L':
-    case 'l':{
-
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->inductance.name , token);
-      
-      /* read <+> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->inductance.node1 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->inductance.node1 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->inductance.node1 = n;
-        }
-      } 
-
-
-//      node->inductance.node1 = atoi(token);
-      
-      /* read <-> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->inductance.node2 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->inductance.node2 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->inductance.node2 = n;
-        }
-      } 
-
-
-      //node->inductance.node2 = atoi(token);
-
-      /* read value node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-      node->inductance.value = atof(token);
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_INDUCTANCE_TYPE;
-        return 1;
-      }
-      else{
-        /* tokens were found.print for debugging...*/
-        printf("LINE: %s , garbage token: %s\n" , line , token);
-        return 0;
-      }     
-    }
-
-    /*
-     * VOLTAGE SOURCE
-     */
-    case 'v':
-    case 'V':{
-
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->source_v.name , token);
-      node->source_v.is_ac = 0;
-
-      /* read <+> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->source_v.node1 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->source_v.node1 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->source_v.node1 = n;
-        }
-      } 
-
-
-      //node->source_v.node1 = atoi(token);
-
-      /* read <-> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->source_v.node2 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->source_v.node2 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->source_v.node2 = n;
-        }
-      } 
-
-      //node->source_v.node2 = atoi(token);
-
-      /* read value node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-      node->source_v.value = atof(token);
-
-
-      /* NO MORE TOKENS.IF FOUND CHECK FOR TRANSIENT SPEC*/
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_SOURCE_V_TYPE;
-        return 1;
-      }
-      else{
-
-        /*check for exponential transient spec*/
-        if (strcmp(token,"EXP") == 0 || strcmp(token,"exp") == 0){
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          
-          /*store the i1 value*/
-          node->source_v.i1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i2 value of the exponential transient spec\n");
-            return 0;
-          }
-          
-          /*store the i2 value*/
-          node->source_v.i2 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td1 value*/
-          node->source_v.td1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tc1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tc1 value*/
-          node->source_v.tc1 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td2 value*/
-          node->source_v.td2 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tc2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tc2 value*/
-          node->source_v.tc2 = atof(token);
-          *type = NODE_SOURCE_V_TYPE;
-          node->source_v.pulse_type = PULSE_EXP;
-          node->source_v.is_ac = 1;
-          return 1;
-
-        }
-        /*check for SIN transient spec*/
-        else if(strcmp(token,"SIN") == 0 || strcmp(token,"sin") == 0){
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i1 value*/
-          node->source_v.i1 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the ia value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the ia value*/
-          node->source_v.ia = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the fr value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the fr value*/
-          node->source_v.fr = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td value*/
-          node->source_v.td = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the df value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the df value*/
-          node->source_v.df = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the ph value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the ph value*/
-          node->source_v.ph = atof(token);
-          *type = NODE_SOURCE_V_TYPE;
-          node->source_v.pulse_type = PULSE_SIN;
-          node->source_v.is_ac = 1;
-          return 1;
-
-        }
-
-        /*check for PULSE transient spec*/
-        else if(strcmp(token,"PULSE") == 0 || strcmp(token,"PULSE") == 0){
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i1 value*/
-          node->source_v.i1 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i2 value*/
-          node->source_v.i2 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td value*/
-          node->source_v.td = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tr value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tr value*/
-          node->source_v.tr = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tf value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tf value*/
-          node->source_v.tf = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the pw value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the pw value*/
-          node->source_v.pw = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the per value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the per value*/
-          node->source_v.per = atof(token);
-          *type = NODE_SOURCE_V_TYPE;
-          node->source_v.pulse_type = PULSE_PULSE;
-          node->source_v.is_ac = 1;
-          return 1;
-
-        }
-
-        else if(strcmp(token,"PWL") == 0 || strcmp(token,"pwl")){
-
-
-          PAIR_LIST* pair_list = create_pair_list();
-          if(!pair_list){
-            printf("Not enough memory for pair list...\n");
-            return 0;
-          }
-
-          
-          token = strtok(NULL,"() \n");
-            if(token == NULL){
-              printf("No value pairs for PWL given in netlist\n");
-              return 0;
-            }
-
-          while(token != NULL){
-            double ti,ii;
-            
-            
-            /*store the ti value of the pair*/
-            ti = atof(token);
-
-            token = strtok(NULL,"() \n");
-            if(token == NULL){
-              printf("No voltage value specified for the pair\n");
-              return 0;
-            }
-            ii = atof(token);
-            add_to_pair_list(pair_list, ti, ii);
-            
-            token = strtok(NULL,"() \n");
-  
-          }
-          node->source_v.pulse_type = PULSE_PULSE;
-          node->source_v.pair_list = pair_list;
-          node->source_v.is_ac = 1;
-          return 1;
-        }
-      }
-      break;
-    }
-
-
-    /*
-     * CURRENT SOURCE
-     */
-    case 'i':
-    case 'I':{
-
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->source_i.name , token);
-      node->source_i.is_ac = 0;
-
-      /* read <+> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->source_i.node1 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->source_i.node1 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->source_i.node1 = n;
-        }
-      }
-
-
-      //node->source_i.node1 = atoi(token);
-
-      /* read <-> node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->source_i.node2 = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->source_i.node2 = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->source_i.node2 = n;
-        }
-      }
-
-      //node->source_i.node2 = atoi(token);
-
-      /* read value node */
-      token = strtok(NULL," ");
-      if( token == NULL){
-        return 0;
-      }
-      node->source_i.value = atof(token);
-
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_SOURCE_I_TYPE;
-        return 1;
-      }
-      else{
-        
-        /*check for exponential transient spec*/
-        if (strcmp(token,"EXP") == 0 || strcmp(token,"exp") == 0){
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i1 value*/
-          node->source_i.i1 = atof(token);
-
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i2 value*/
-          node->source_i.i2 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td1 value*/
-          node->source_i.td1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tc1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tc1 value*/
-          node->source_i.tc1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td2 value*/
-          node->source_i.td2 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tc2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tc2 value*/
-          node->source_i.tc2 = atof(token);
-          *type = NODE_SOURCE_I_TYPE;
-          node->source_i.pulse_type = PULSE_EXP;
-          node->source_i.is_ac = 1;
-
-          return 1;
-
-
-
-        }
-        /*check for SIN transient spec*/
-        else if(strcmp(token,"SIN") == 0 || strcmp(token,"sin") == 0){
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i1 value*/
-          node->source_i.i1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the ia value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the ia value*/
-          node->source_i.ia = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the fr value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the fr value*/
-          node->source_i.fr = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td value*/
-          node->source_i.td = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the df value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the df value*/
-          node->source_i.df = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the ph value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the ph value*/
-          node->source_i.df = atof(token);
-          *type = NODE_SOURCE_I_TYPE;
-          node->source_i.pulse_type = PULSE_SIN;
-          node->source_i.is_ac = 1;
-          return 1;
-        }
-
-        /*check for PULSE transient spec*/
-        else if(strcmp(token,"PULSE") == 0 || strcmp(token,"PULSE") == 0){
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i1 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i1 value*/
-          node->source_i.i1 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the i2 value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the i2 value*/
-          node->source_i.i2 = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the td value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the td value*/
-          node->source_i.td = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tr value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tr value*/
-          node->source_i.tr = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the tf value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the tf value*/
-          node->source_i.tf = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the pw value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the pw value*/
-          node->source_i.pw = atof(token);
-
-          token = strtok(NULL,"() \n");
-          if(token == NULL){
-            printf("No value specified for the per value of the exponential transient spec\n");
-            return 0;
-          }
-          /*store the per value*/
-          node->source_i.per = atof(token);
-          *type = NODE_SOURCE_I_TYPE;
-          node->source_i.pulse_type = PULSE_PULSE;
-          node->source_i.is_ac = 1;
-          return 1;
-        }
-
-        else if(strcmp(token,"PWL") == 0 || strcmp(token,"pwl")){
-
-
-          PAIR_LIST* pair_list = create_pair_list();
-          if(!pair_list){
-            printf("Not enough memory for pair list...\n");
-            return 0;
-          }
-
-          token = strtok(NULL,"() \n");
-            if(token == NULL){
-              printf("No time value specified for the pair\n");
-              return 0;
-            }
-
-          while(token != NULL){
-            double ti,ii;
-            
-            
-            /*store the ti value of the pair*/
-            ti = atof(token);
-
-            token = strtok(NULL,"() \n");
-            if(token == NULL){
-              printf("No voltage value specified for the pair\n");
-              return 0;
-            }
-            ii = atof(token);
-            
-            add_to_pair_list(pair_list, ti, ii);
-
-            token = strtok(NULL,"() \n");            
-            
-          }
-          node->source_i.pulse_type = PULSE_PULSE;
-          node->source_i.pair_list = pair_list;
-          node->source_i.is_ac = 1;
-          return 1;
-        }
-      }
-      break;
-    }
-
-    /*
-     * MOSFET transistor
-     */
-    case 'M':
-    case 'm':{
-
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->mosfet.name , token);
-
-      /* read drain */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->mosfet.drain = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->mosfet.drain = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->mosfet.drain = n;
-        }
-      }
-
-      //node->mosfet.drain = atoi(token);
-
-      /* read gate */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-      
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->mosfet.gate = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->mosfet.gate = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->mosfet.gate = n;
-        }
-      }      
-
-
-      //node->mosfet.gate = atoi(token);
-
-      /* read source */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->mosfet.source = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->mosfet.source = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->mosfet.source = n;
-        }
-      }
-
-      //node->mosfet.source = atoi(token);
-
-      /* read body */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->mosfet.body = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->mosfet.body = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->mosfet.body = n;
-        }
-      }
-
-      //node->mosfet.body = atoi(token);
-
-      /* read length */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-      node->mosfet.l = atof(token);
-
-      /* read width */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-      node->mosfet.w = atof(token);
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_MOSFET_TYPE;
-        return 1;
-      }
-      else{
-        /* tokens were found.print for debugging...*/
-        printf("LINE: %s  garbage token : %s\n" , line , token);
-        return 0;
-      }
-    }
-
-    /*
-     * Bipolar junction transistor
-     */
-    case 'Q':
-    case 'q':{
-      /* read name */
-      token = strtok(line," ");
-      if( token == NULL ){
-        return 0 ;
-      }
-      strcpy( node->bjt.name , token);
-
-      /* read collector */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->bjt.collector = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->bjt.collector = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->bjt.collector = n;
-        }
-      }
-
-      //node->bjt.collector = atoi(token);
-
-      /* read base */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->bjt.base = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->bjt.base = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->bjt.base = n;
-        }
-      }
-
-      //node->bjt.base  = atoi(token);
-
-      /* read emitter */
-      token = strtok(NULL," ");
-      if( token == NULL )
-        return 0;
-
-      /* check for reference node (ground) */
-      if( strcmp(token,"0") == 0 ){
-        node->bjt.emitter = 0;
-        list->has_reference = 1;
-      }
-      else{
-        /*
-         * this is not a reference node.Add string to
-         * hash table
-         */
-        flag = ht_insert_pair(list->hashtable, token , node_count);
-        if( flag == 1 ){
-          /* successfull insertion */
-          node->bjt.emitter = node_count;
-          node_count++;    // get ready for the next node
-        }
-        else if( flag == 0 ){
-          /* NULL pointer or out of memory */
-          printf("Error at inserting pair to hash table..\n");
-          //free_list(list);
-          exit(1);
-        }
-        else if( flag == -1 ){
-
-          int n;
-          //printf("Node : \"%s\" already on hash table \n",token);
-          ht_get(list->hashtable,token,&n);
-          node->bjt.emitter = n;
-        }
-      }     
-
-
-      //node->bjt.emitter = atoi(token);
-
-      /* more will be added later */
-      //
-      //      HERE
-      //
-
-
-      /* NO MORE TOKENS.IF FOUND RETURN ERROR */
-      token = strtok(NULL," \n");
-      if( token == NULL ){
-        *type = NODE_BJT_TYPE;
-        return 1;
-      }
-      else{
-        /* tokens were found.print for debugging...*/
-        printf("LINE: %s  garbage token : %s\n" , line , token);
-        return 0;
-      }
-
-    }
-
-    /*
-     * DIODE
-     */
-
-
+	char c;
+	long node_count = 1;
+
+	ht_insert_pair(list->hashtable, "0" , 0);
+
+	if( line == NULL || node == NULL  || type == NULL )
+	return 0;
+
+	c = line[0];
+	GENERAL_NODE* temp_node = (GENERAL_NODE*)malloc(sizeof(GENERAL_NODE));
+
+	//printf("%s \n",line);
+	if(c == '.')
+		return 1;
+	node_count = parse_line(temp_node,line,list,c);
+
+	switch(c){
+		case 'r':
+    	case 'R': { 	set_R_Node(list,temp_node,&node->resistance,type);	break;	}
+    	case 'c':
+    	case 'C': { 	set_C_Node(temp_node,&node->capacity,type); 		break; 	}
+    	case 'l':
+    	case 'L': {		set_L_Node(list,temp_node,&node->inductance,type); 	break; 	}
+    	case 'v':
+		case 'V': {		set_V_Node(list,temp_node,&node->source_v,type);	break;	}
+		case 'i':
+		case 'I': {		set_I_Node(temp_node,&node->source_i,type);			break;	}
+		case 'q':
+		case 'Q': {		set_Q_Node(temp_node,&node->bjt,type);				break;	}
+		case 'm':
+		case 'M': {		set_M_Node(temp_node,&node->mosfet,type);			break;	}
+		case '.': {		break;														}
+	}
+	return 1;
+}
+
+#if 0
     /*
      * Commands
      */
@@ -1697,3 +733,4 @@ static int get_node_from_line( LIST* list,char* line , NODE* node , int* type){
 
   return 2;
 }
+#endif

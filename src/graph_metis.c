@@ -24,7 +24,8 @@ sparse_matrix* graph_partition(LIST *list , partition_t* partition_info)
 	params_t *params;
 	idx_t options[METIS_NOPTIONS], status;
 	idx_t objval;
-	sparse_matrix* matrix = (sparse_matrix*) malloc(sizeof(sparse_matrix));
+
+	sparse_matrix* matrix = (sparse_matrix*)malloc(sizeof(sparse_matrix));
 
 	graph = ReadGraph(list);
 
@@ -81,7 +82,7 @@ sparse_matrix* graph_partition(LIST *list , partition_t* partition_info)
 	matrix->n = graph->nvtxs;
 	matrix->p = graph->xadj;
 	matrix->i = graph->adjncy;
-
+	matrix->x = NULL;
 
 
 	return matrix;

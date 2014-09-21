@@ -69,6 +69,8 @@ typedef struct list{
 
 	double time_step;
 	double fin_time;
+
+	int non_zero_elements;
 }LIST;
 
 

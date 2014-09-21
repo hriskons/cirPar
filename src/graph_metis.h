@@ -80,7 +80,6 @@ typedef struct {
 
 
 
-sparse_matrix* graph_partition(LIST *list , partition_t* partition_table);
 
 graph_t *ReadGraph(LIST *list);
 
@@ -89,6 +88,8 @@ void InitGraph(graph_t *graph);
 void double_to_int( double *x ,int *adjwgt ,int size);
 
 void int_to_idx(int *vector_int , idx_t *vector_idx,int size);
+
+sparse_matrix* graph_partition(LIST *list , partition_t* partition_table);
 
 
 #endif /* GRAPH_METIS_H_ */

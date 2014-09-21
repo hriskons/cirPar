@@ -3,7 +3,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-
 #define CS_MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define CS_MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define CS_FLIP(i) (-(i)-2)
@@ -612,6 +611,8 @@ int cs_entry(cs *T, int i, int j, double x);
  *  @return 0 on error and 1 otherwise.
  */
 int cs_print(const cs *A, const char *outputFilename, int brief);
+
+
 
 
 #endif /* SPARSE_MATRIX_H_ */

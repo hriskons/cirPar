@@ -1,7 +1,7 @@
 #include "graph_functions.h"
 #include "graph_metis.h"
 #include "wraped_functions.h"
-
+#include "csparse.h"
 
 void add_resistance_element_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
 void add_current_source_graph(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row);
@@ -319,7 +319,7 @@ graph_t *ReadGraph(LIST *list)
 	int_to_idx(graph->adjwgt,graph->vwgt, graph->nvtxs);
 	int_to_idx(graph->adjwgt,graph->vsize, graph->nvtxs);
 
-#if 1
+#if 0
 	cs_print(graph_matrix,"sparse_matrix_after",0);
 #endif
 	return graph;

@@ -4,7 +4,6 @@
 #include "plot.h"
 #include "wraped_functions.h"
 
-#define DEFAULT_NZ 15
 
 #define DEBUG 0
 #define debug_print(fmt, ...) \
@@ -19,6 +18,8 @@ sparse_matrix* create_mna_sparse(LIST *list, sparse_vector** b, int* vector_len)
 	sparse_matrix* matrix = NULL;
 	LIST_NODE* curr;
 
+	sparse_matrix* temp;
+
 	int num_nodes = ht_get_num_nodes(list->hashtable);
 	int* nodeids = (int*)malloc(sizeof(int) * num_nodes);
 	if(!nodeids)
@@ -30,10 +31,11 @@ sparse_matrix* create_mna_sparse(LIST *list, sparse_vector** b, int* vector_len)
 	int m2_elements_found = 0;       // # of elements in group 2
 
 	/* allocate matrix and vector */
-	rows    = list->hashtable->num_nodes + list->m2;
- 	columns = list->hashtable->num_nodes + list->m2;
+	rows    = list->hashtable->num_nodes + list->m2 - 1;
+ 	columns = list->hashtable->num_nodes + list->m2 - 1;
 
- 	matrix =  cs_spalloc( rows , columns , DEFAULT_NZ , 1 , 1 );
+ 	printf("non zero elements: %d\n",list->non_zero_elements);
+ 	matrix =  cs_spalloc( rows , columns , list->non_zero_elements , 1 , 1 );
  	if(!matrix)
  		return NULL;
 
@@ -49,22 +51,24 @@ sparse_matrix* create_mna_sparse(LIST *list, sparse_vector** b, int* vector_len)
  			case NODE_RESISTANCE_TYPE:  { 	add_resistance_element(matrix , NULL, curr , -1); break; 	}  			/* RESISTANCE ELEMENT	 */
  			case NODE_SOURCE_I_TYPE: 	{ 	add_current_source(matrix, vector, curr, -1); break;		}			/* CURRENT SOURCE  		 */
  			case NODE_SOURCE_V_TYPE:	{
- 	 										m2_elements_found++;
  	 										int matrix_row = list->hashtable->num_nodes + m2_elements_found - 1;
  	 										add_voltage_source( matrix,  vector,  curr, matrix_row );
+ 	 										m2_elements_found++;
  	 										break;
  	 									}																			/* VOLTAGE SOURCE		 */
  			case NODE_INDUCTANCE_TYPE:  {
-											m2_elements_found++;
-											int matrix_row = list->hashtable->num_nodes  + m2_elements_found - 1 ;
+											int matrix_row = list->hashtable->num_nodes  + m2_elements_found - 1;
 											add_inductunce_element( matrix, vector, curr, matrix_row);
+											m2_elements_found++;
 											break;
  	 									}																			/* INDUCTUNCE			 */
  		}
  	} 	
 
-	matrix = cs_compress(matrix);
- 	
+	temp = cs_compress(matrix);
+	cs_spfree(matrix);
+	matrix = temp;
+ 	cs_print(matrix,"output_matrix_with_duplicates",0);
  	/* remove duplicates */
  	if( !cs_dupl(matrix) ){
  		fprintf(stderr, "Sparse matrix: duplicates not removed \n");
@@ -72,7 +76,7 @@ sparse_matrix* create_mna_sparse(LIST *list, sparse_vector** b, int* vector_len)
  		free(vector);
  		return NULL;
  	}
-	*vector_len = matrix->n;
+	*vector_len = rows;
  	*b = vector;
 
  	//cs_print(matrix,"sparse_matrix.txt",0);
@@ -84,35 +88,28 @@ void add_resistance_element(sparse_matrix* matrix, sparse_vector* vector, LIST_N
 {
 	double conductance = 1 / curr->node.resistance.value ;
 	long plus_node  = curr->node.resistance.node1 - 1;
-	long minus_node = curr->node.resistance.node2  - 1;
-	debug_print("plus_node: %d minus_node: %d\n",plus_node,minus_node);
+	long minus_node = curr->node.resistance.node2 - 1;
+	debug_print("plus_node: %lu minus_node: %lu\n",plus_node,minus_node);
 
 	/* <+> is ground */
 	if( plus_node == -1 ){
-
-		debug_print("Adding to matrix element (%d,%d) value:%d\n\n",minus_node,minus_node,1);
-
 		csEntry(matrix, minus_node , minus_node , conductance);
 	}
 	/* <-> is ground */
 	else if ( minus_node == -1  ){
-
 		csEntry(matrix, plus_node , plus_node , conductance);
 	}
 	else {
-
 		/* <+> <+> */
 		csEntry(matrix, plus_node , plus_node , conductance);
-
+		/* <-> <-> */
+		csEntry(matrix, minus_node , minus_node , conductance);
 		/* <+> <-> */
 		csEntry(matrix, plus_node , minus_node , -conductance);
-
 		/* <-> <+> */
 		csEntry(matrix, minus_node , plus_node , -conductance);
 
-		/* <-> <-> */
-		csEntry(matrix, minus_node , minus_node , conductance);
-	}
+			}
 }
 
 void add_current_source(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE* curr,int matrix_row)
@@ -156,14 +153,12 @@ void add_voltage_source(sparse_matrix* matrix, sparse_vector* vector, LIST_NODE*
 	/* <+> */
 	if( plus_node != -1 ){
 		csEntry(matrix, matrix_row , plus_node , 1.0 );
-
 		csEntry(matrix, plus_node , matrix_row , 1.0 );
 	}
 
 	/* <-> */
 	if( minus_node != -1 ){
 		csEntry(matrix, matrix_row , minus_node , -1.0 );
-
 		csEntry(matrix, minus_node , matrix_row , -1.0 );
 	}
 
@@ -180,13 +175,11 @@ void add_inductunce_element(sparse_matrix* matrix, sparse_vector* vector, LIST_N
 	/* <+> */
 	if( plus_node != -1 ){
 		csEntry(matrix, matrix_row , plus_node , 1.0);
-
 		csEntry(matrix, plus_node , matrix_row , 1.0);
 	}
 	/* <-> */
 	if( minus_node != -1 ){
 		csEntry(matrix, matrix_row , minus_node , -1.0 );
-
 		csEntry(matrix, minus_node , matrix_row , -1.0 );
 	}
 }
